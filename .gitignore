@@ -1,0 +1,23 @@
+# 操作系统文件
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# 编辑器配置
+.vscode/
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# 临时文件
+*.tmp
+*.bak
+*.backup
+*.log
+
+# 笔记草稿（用户个人笔记可以放这里）
+notes/
+drafts/
+personal/

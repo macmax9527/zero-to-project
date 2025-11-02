@@ -1,0 +1,1150 @@
+# 第5章：数据获取层 - 外部依赖管理
+
+> **本章目标**：学会设计数据获取层，优雅地对接外部 API 和服务
+
+---
+
+## 🎯 核心概念
+
+### 什么是数据获取层？
+
+**类比：餐厅点餐**
+
+```
+你（业务逻辑）不直接去厨房拿食物
+         ↓
+通过服务员（数据获取层）点餐
+         ↓
+服务员去厨房（外部 API）取餐
+         ↓
+服务员把食物端给你
+```
+
+**数据获取层就是**：
+- 系统和外部世界的**桥梁**
+- 封装所有**外部 API 调用**
+- 统一处理**错误和重试**
+- 转换外部数据格式到内部格式
+
+### 为什么需要数据获取层？
+
+#### ❌ 不封装（直接调用外部 API）
+
+```python
+# decision.py
+def make_decision():
+    # 直接调用 Binance API
+    url = "https://api.binance.com/api/v3/klines"
+    params = {"symbol": "BTCUSDT", "interval": "3m", "limit": 100}
+    response = requests.get(url, params=params)
+    klines = response.json()
+
+    # 直接调用 DeepSeek API
+    ai_url = "https://api.deepseek.com/chat/completions"
+    headers = {"Authorization": "Bearer sk-xxx"}
+    ai_response = requests.post(ai_url, headers=headers, json={...})
+```
+
+**问题**：
+- 🔴 换个交易所 → decision.py 要大改
+- 🔴 API 返回格式变了 → 到处要改
+- 🔴 需要重试 → 每个地方都要写重试逻辑
+- 🔴 想加缓存 → 不知道改哪
+- 🔴 测试困难 → 必须连接真实 API
+
+#### ✅ 封装成数据获取层
+
+```python
+# market/data_fetcher.py（数据获取层）
+class MarketDataFetcher:
+    def fetch_klines(self, symbol, interval, limit):
+        # 封装 API 调用
+        # 处理错误
+        # 自动重试
+        # 格式转换
+        pass
+
+# decision.py（业务逻辑）
+def make_decision():
+    fetcher = MarketDataFetcher()
+    klines = fetcher.fetch_klines("BTCUSDT", "3m", 100)  # 简单！
+    # 不关心 API 细节
+```
+
+**优势**：
+- ✅ business logic 简洁
+- ✅ 换 API 只改一个地方
+- ✅ 错误处理集中
+- ✅ 容易测试（mock fetcher）
+
+---
+
+## 🧠 思维方法
+
+### 方法一：接口抽象
+
+**核心思想**：依赖接口，不依赖具体实现
+
+```python
+# 定义接口
+class ExchangeAPI:
+    def get_account(self):
+        """获取账户信息"""
+        raise NotImplementedError
+
+    def get_klines(self, symbol, interval):
+        """获取K线数据"""
+        raise NotImplementedError
+
+    def place_order(self, symbol, side, quantity):
+        """下单"""
+        raise NotImplementedError
+
+# 实现1：Binance
+class BinanceAPI(ExchangeAPI):
+    def get_account(self):
+        url = "https://api.binance.com/api/v3/account"
+        # ... Binance 特定逻辑
+        return self._parse_binance_account(response)
+
+# 实现2：Hyperliquid
+class HyperliquidAPI(ExchangeAPI):
+    def get_account(self):
+        url = "https://api.hyperliquid.xyz/info"
+        # ... Hyperliquid 特定逻辑
+        return self._parse_hyperliquid_account(response)
+
+# 使用（不关心具体是哪个交易所）
+def trade(exchange: ExchangeAPI):
+    account = exchange.get_account()  # 统一接口！
+    # 不管是 Binance 还是 Hyperliquid
+```
+
+### 方法二：统一数据模型
+
+**问题**：不同 API 返回格式不同
+
+```json
+// Binance 的账户格式
+{
+    "totalWalletBalance": "1250.50",
+    "availableBalance": "1000.00",
+    ...
+}
+
+// Hyperliquid 的账户格式
+{
+    "marginSummary": {
+        "accountValue": "1250.50",
+        "withdrawable": "1000.00"
+    }
+}
+```
+
+**解决**：定义统一的内部数据模型
+
+```python
+# 内部统一模型
+class Account:
+    def __init__(self):
+        self.total_equity: float = 0.0
+        self.available_balance: float = 0.0
+        self.margin_used: float = 0.0
+
+# Binance 转换
+def parse_binance_account(raw_data) -> Account:
+    account = Account()
+    account.total_equity = float(raw_data["totalWalletBalance"])
+    account.available_balance = float(raw_data["availableBalance"])
+    return account
+
+# Hyperliquid 转换
+def parse_hyperliquid_account(raw_data) -> Account:
+    account = Account()
+    summary = raw_data["marginSummary"]
+    account.total_equity = float(summary["accountValue"])
+    account.available_balance = float(summary["withdrawable"])
+    return account
+```
+
+**好处**：
+- ✅ 业务逻辑只用 `Account` 对象
+- ✅ 不关心数据来自哪个 API
+- ✅ 换 API 不影响业务逻辑
+
+### 方法三：错误处理和重试
+
+**外部 API 常见错误**：
+- 网络超时
+- API 限流（429 Too Many Requests）
+- 服务暂时不可用（503）
+- 返回数据格式错误
+
+#### 基础错误处理
+
+```python
+def fetch_data(url):
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()  # 检查 HTTP 状态码
+        return response.json()
+    except requests.Timeout:
+        print("请求超时")
+        return None
+    except requests.HTTPError as e:
+        print(f"HTTP 错误: {e}")
+        return None
+    except Exception as e:
+        print(f"未知错误: {e}")
+        return None
+```
+
+#### 智能重试
+
+```python
+import time
+from functools import wraps
+
+def retry(max_attempts=3, delay=1, backoff=2):
+    """
+    重试装饰器
+    max_attempts: 最多尝试次数
+    delay: 初始延迟（秒）
+    backoff: 延迟倍数（指数退避）
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            attempt = 0
+            current_delay = delay
+
+            while attempt < max_attempts:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    attempt += 1
+                    if attempt >= max_attempts:
+                        raise  # 重试用尽，抛出异常
+
+                    print(f"第{attempt}次尝试失败: {e}")
+                    print(f"等待{current_delay}秒后重试...")
+                    time.sleep(current_delay)
+                    current_delay *= backoff  # 指数退避
+
+        return wrapper
+    return decorator
+
+# 使用
+@retry(max_attempts=3, delay=1, backoff=2)
+def fetch_klines(symbol):
+    response = requests.get(f"https://api.binance.com/api/v3/klines?symbol={symbol}")
+    return response.json()
+
+# 调用（自动重试）
+data = fetch_klines("BTCUSDT")
+# 失败会重试：等1秒、等2秒、等4秒
+```
+
+#### 分类错误处理
+
+```python
+def fetch_with_smart_retry(url):
+    try:
+        response = requests.get(url)
+
+        # 429: 限流 → 等待更久
+        if response.status_code == 429:
+            retry_after = int(response.headers.get("Retry-After", 60))
+            print(f"API 限流，等待 {retry_after} 秒")
+            time.sleep(retry_after)
+            return fetch_with_smart_retry(url)  # 重试
+
+        # 5xx: 服务器错误 → 短暂重试
+        elif 500 <= response.status_code < 600:
+            print("服务器错误，3秒后重试")
+            time.sleep(3)
+            return fetch_with_smart_retry(url)
+
+        # 4xx: 客户端错误 → 不重试（改了也没用）
+        elif 400 <= response.status_code < 500:
+            raise Exception(f"客户端错误: {response.status_code}")
+
+        return response.json()
+
+    except requests.Timeout:
+        print("超时，重试")
+        return fetch_with_smart_retry(url)
+```
+
+### 方法四：缓存策略
+
+**问题**：重复请求浪费资源
+
+```python
+# ❌ 每次都请求
+def get_klines():
+    return requests.get("https://api.binance.com/...").json()
+
+# 1分钟内调用10次 → 发送10次请求（浪费）
+```
+
+**解决**：缓存
+
+```python
+import time
+
+class CachedDataFetcher:
+    def __init__(self, cache_seconds=60):
+        self.cache = {}  # {key: (data, timestamp)}
+        self.cache_seconds = cache_seconds
+
+    def fetch_klines(self, symbol, interval):
+        # 生成缓存键
+        cache_key = f"{symbol}_{interval}"
+
+        # 检查缓存
+        if cache_key in self.cache:
+            data, timestamp = self.cache[cache_key]
+            age = time.time() - timestamp
+
+            if age < self.cache_seconds:
+                print(f"使用缓存（{age:.1f}秒前）")
+                return data
+
+        # 缓存过期或不存在，重新获取
+        print("获取新数据")
+        data = self._fetch_from_api(symbol, interval)
+
+        # 更新缓存
+        self.cache[cache_key] = (data, time.time())
+
+        return data
+```
+
+**缓存策略**：
+
+| 数据类型 | 缓存时长 | 原因 |
+|----------|----------|------|
+| K线数据（1分钟） | 10秒 | 变化快 |
+| K线数据（1小时） | 5分钟 | 变化慢 |
+| 账户余额 | 1秒 | 需要实时 |
+| 交易所配置 | 1小时 | 基本不变 |
+
+---
+
+## 📚 NOFX 案例分析
+
+### NOFX 的数据获取层设计
+
+#### 1. Trader 接口（交易所抽象）
+
+```go
+// trader/interface.go
+package trader
+
+type Account struct {
+    TotalEquity      float64
+    AvailableBalance float64
+    MarginUsed       float64
+    MarginUsedPct    float64
+}
+
+type Position struct {
+    Symbol           string
+    Side             string  // "long" or "short"
+    EntryPrice       float64
+    MarkPrice        float64
+    Quantity         float64
+    Leverage         int
+    UnrealizedPnL    float64
+    LiquidationPrice float64
+}
+
+// Trader 接口（所有交易所必须实现）
+type Trader interface {
+    // 账户信息
+    GetAccount() (Account, error)
+    GetPositions() ([]Position, error)
+
+    // 交易操作
+    OpenLong(symbol string, quantity float64, leverage int) error
+    OpenShort(symbol string, quantity float64, leverage int) error
+    CloseLong(symbol string, quantity float64) error
+    CloseShort(symbol string, quantity float64) error
+
+    // 风控
+    SetStopLoss(symbol string, side string, price float64) error
+    SetTakeProfit(symbol string, side string, price float64) error
+}
+```
+
+#### 2. Binance 实现
+
+```go
+// trader/binance_futures.go
+package trader
+
+import (
+    "context"
+    "fmt"
+    "github.com/adshao/go-binance/v2/futures"
+    "strconv"
+)
+
+type BinanceFutures struct {
+    client    *futures.Client
+    apiKey    string
+    secretKey string
+}
+
+func NewBinanceFutures(apiKey, secretKey string) *BinanceFutures {
+    client := binance.NewFuturesClient(apiKey, secretKey)
+    return &BinanceFutures{
+        client:    client,
+        apiKey:    apiKey,
+        secretKey: secretKey,
+    }
+}
+
+// GetAccount 获取账户信息
+func (b *BinanceFutures) GetAccount() (Account, error) {
+    // 1. 调用 Binance API
+    account, err := b.client.NewGetAccountService().Do(context.Background())
+    if err != nil {
+        return Account{}, fmt.Errorf("获取账户失败: %w", err)
+    }
+
+    // 2. 转换为统一格式
+    totalEquity, _ := strconv.ParseFloat(account.TotalWalletBalance, 64)
+    availableBalance, _ := strconv.ParseFloat(account.AvailableBalance, 64)
+    marginUsed, _ := strconv.ParseFloat(account.TotalInitialMargin, 64)
+
+    return Account{
+        TotalEquity:      totalEquity,
+        AvailableBalance: availableBalance,
+        MarginUsed:       marginUsed,
+        MarginUsedPct:    (marginUsed / totalEquity) * 100,
+    }, nil
+}
+
+// GetPositions 获取持仓
+func (b *BinanceFutures) GetPositions() ([]Position, error) {
+    // 1. 调用 API
+    positions, err := b.client.NewGetPositionRiskService().Do(context.Background())
+    if err != nil {
+        return nil, fmt.Errorf("获取持仓失败: %w", err)
+    }
+
+    // 2. 过滤和转换
+    var result []Position
+    for _, pos := range positions {
+        posAmt, _ := strconv.ParseFloat(pos.PositionAmt, 64)
+
+        // 过滤掉空仓
+        if posAmt == 0 {
+            continue
+        }
+
+        entryPrice, _ := strconv.ParseFloat(pos.EntryPrice, 64)
+        markPrice, _ := strconv.ParseFloat(pos.MarkPrice, 64)
+        unrealizedPnL, _ := strconv.ParseFloat(pos.UnrealizedProfit, 64)
+        liquidationPrice, _ := strconv.ParseFloat(pos.LiquidationPrice, 64)
+        leverage, _ := strconv.Atoi(pos.Leverage)
+
+        result = append(result, Position{
+            Symbol:           pos.Symbol,
+            Side:             getSide(posAmt),
+            EntryPrice:       entryPrice,
+            MarkPrice:        markPrice,
+            Quantity:         abs(posAmt),
+            Leverage:         leverage,
+            UnrealizedPnL:    unrealizedPnL,
+            LiquidationPrice: liquidationPrice,
+        })
+    }
+
+    return result, nil
+}
+
+// OpenLong 开多
+func (b *BinanceFutures) OpenLong(symbol string, quantity float64, leverage int) error {
+    // 1. 设置杠杆
+    _, err := b.client.NewChangeLeverageService().
+        Symbol(symbol).
+        Leverage(leverage).
+        Do(context.Background())
+    if err != nil {
+        return fmt.Errorf("设置杠杆失败: %w", err)
+    }
+
+    // 2. 下市价买单
+    _, err = b.client.NewCreateOrderService().
+        Symbol(symbol).
+        Side(futures.SideTypeBuy).
+        Type(futures.OrderTypeMarket).
+        Quantity(formatQuantity(quantity)).
+        Do(context.Background())
+
+    if err != nil {
+        return fmt.Errorf("开多失败: %w", err)
+    }
+
+    return nil
+}
+
+// 辅助函数
+func getSide(posAmt float64) string {
+    if posAmt > 0 {
+        return "long"
+    }
+    return "short"
+}
+
+func formatQuantity(q float64) string {
+    return fmt.Sprintf("%.8f", q)
+}
+```
+
+#### 3. Hyperliquid 实现
+
+```go
+// trader/hyperliquid_trader.go
+package trader
+
+// 实现同样的 Trader 接口，但调用 Hyperliquid API
+
+type HyperliquidTrader struct {
+    privateKey string
+    walletAddr string
+    isTestnet  bool
+}
+
+func (h *HyperliquidTrader) GetAccount() (Account, error) {
+    // Hyperliquid 的 API 调用
+    // 返回统一的 Account 结构
+}
+
+func (h *HyperliquidTrader) OpenLong(symbol string, quantity float64, leverage int) error {
+    // Hyperliquid 的下单逻辑
+}
+
+// ... 其他方法
+```
+
+**设计亮点**：
+- ✅ 统一接口：`GetAccount()` 对所有交易所一样
+- ✅ 内部实现不同：Binance 用 REST API，Hyperliquid 用签名消息
+- ✅ 上层代码不关心：`AutoTrader` 只知道 `Trader` 接口
+
+#### 4. Market Data 封装
+
+```go
+// market/data.go
+package market
+
+import (
+    "github.com/markcheno/go-talib"
+)
+
+type Kline struct {
+    OpenTime  int64
+    Open      float64
+    High      float64
+    Low       float64
+    Close     float64
+    Volume    float64
+    CloseTime int64
+}
+
+type MACD struct {
+    MACD   float64
+    Signal float64
+    Hist   float64
+}
+
+type Data struct {
+    Symbol    string
+    Klines3m  []Kline  // 3分钟K线（100根）
+    Klines4h  []Kline  // 4小时K线（100根）
+
+    // 3分钟指标
+    RSI3m     float64
+    MACD3m    MACD
+    EMA20_3m  float64
+
+    // 4小时指标
+    RSI4h     float64
+    MACD4h    MACD
+    EMA20_4h  float64
+    EMA50_4h  float64
+    ATR4h     float64
+}
+
+// FetchData 获取并计算所有数据
+func FetchData(symbol string, exchange string) (*Data, error) {
+    data := &Data{Symbol: symbol}
+
+    // 1. 获取K线
+    if err := fetchKlines(data, exchange); err != nil {
+        return nil, err
+    }
+
+    // 2. 计算指标
+    if err := calculateIndicators(data); err != nil {
+        return nil, err
+    }
+
+    return data, nil
+}
+
+func fetchKlines(data *Data, exchange string) error {
+    // 根据交易所选择 API
+    switch exchange {
+    case "binance":
+        return fetchBinanceKlines(data)
+    case "hyperliquid":
+        return fetchHyperliquidKlines(data)
+    default:
+        return fmt.Errorf("不支持的交易所: %s", exchange)
+    }
+}
+
+func fetchBinanceKlines(data *Data) error {
+    client := binance.NewClient("", "")
+
+    // 获取3分钟K线
+    klines3m, err := client.NewKlinesService().
+        Symbol(data.Symbol).
+        Interval("3m").
+        Limit(100).
+        Do(context.Background())
+
+    if err != nil {
+        return err
+    }
+
+    // 转换格式
+    for _, k := range klines3m {
+        data.Klines3m = append(data.Klines3m, Kline{
+            OpenTime:  k.OpenTime,
+            Open:      parseFloat(k.Open),
+            High:      parseFloat(k.High),
+            Low:       parseFloat(k.Low),
+            Close:     parseFloat(k.Close),
+            Volume:    parseFloat(k.Volume),
+            CloseTime: k.CloseTime,
+        })
+    }
+
+    // 获取4小时K线（类似）
+    // ...
+
+    return nil
+}
+
+func calculateIndicators(data *Data) error {
+    // 提取收盘价
+    closes3m := extractCloses(data.Klines3m)
+    closes4h := extractCloses(data.Klines4h)
+
+    // 计算 RSI
+    rsi3m := talib.Rsi(closes3m, 7)
+    data.RSI3m = rsi3m[len(rsi3m)-1]
+
+    rsi4h := talib.Rsi(closes4h, 14)
+    data.RSI4h = rsi4h[len(rsi4h)-1]
+
+    // 计算 MACD
+    macd3m, signal3m, hist3m := talib.Macd(closes3m, 12, 26, 9)
+    data.MACD3m = MACD{
+        MACD:   macd3m[len(macd3m)-1],
+        Signal: signal3m[len(signal3m)-1],
+        Hist:   hist3m[len(hist3m)-1],
+    }
+
+    // 计算 EMA
+    ema20_3m := talib.Ema(closes3m, 20)
+    data.EMA20_3m = ema20_3m[len(ema20_3m)-1]
+
+    // ... 其他指标
+
+    return nil
+}
+
+func extractCloses(klines []Kline) []float64 {
+    closes := make([]float64, len(klines))
+    for i, k := range klines {
+        closes[i] = k.Close
+    }
+    return closes
+}
+```
+
+**设计亮点**：
+- ✅ 一次调用获取所有数据
+- ✅ 自动计算所有指标
+- ✅ 返回统一的 `Data` 结构
+- ✅ 上层不关心数据来源
+
+#### 5. AI API 封装
+
+```go
+// mcp/client.go
+package mcp
+
+import (
+    "bytes"
+    "encoding/json"
+    "net/http"
+    "time"
+)
+
+type Client struct {
+    apiKey  string
+    model   string
+    baseURL string
+    timeout time.Duration
+}
+
+func NewClient(apiKey, model string) *Client {
+    var baseURL string
+    switch model {
+    case "deepseek":
+        baseURL = "https://api.deepseek.com/v1"
+    case "qwen":
+        baseURL = "https://dashscope.aliyuncs.com/api/v1"
+    }
+
+    return &Client{
+        apiKey:  apiKey,
+        model:   model,
+        baseURL: baseURL,
+        timeout: 120 * time.Second,
+    }
+}
+
+// Chat 发送消息给 AI
+func (c *Client) Chat(systemPrompt, userPrompt string) (string, error) {
+    // 1. 构建请求
+    reqBody := map[string]interface{}{
+        "model": c.getModelName(),
+        "messages": []map[string]string{
+            {"role": "system", "content": systemPrompt},
+            {"role": "user", "content": userPrompt},
+        },
+        "temperature": 0.7,
+    }
+
+    jsonData, _ := json.Marshal(reqBody)
+
+    // 2. 发送请求
+    req, _ := http.NewRequest("POST", c.baseURL+"/chat/completions", bytes.NewBuffer(jsonData))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+    client := &http.Client{Timeout: c.timeout}
+    resp, err := client.Do(req)
+    if err != nil {
+        return "", fmt.Errorf("AI API 调用失败: %w", err)
+    }
+    defer resp.Body.Close()
+
+    // 3. 解析响应
+    var result struct {
+        Choices []struct {
+            Message struct {
+                Content string `json:"content"`
+            } `json:"message"`
+        } `json:"choices"`
+    }
+
+    json.NewDecoder(resp.Body).Decode(&result)
+
+    if len(result.Choices) == 0 {
+        return "", fmt.Errorf("AI 无响应")
+    }
+
+    return result.Choices[0].Message.Content, nil
+}
+
+func (c *Client) getModelName() string {
+    switch c.model {
+    case "deepseek":
+        return "deepseek-chat"
+    case "qwen":
+        return "qwen-max"
+    default:
+        return c.model
+    }
+}
+```
+
+**设计亮点**：
+- ✅ 封装不同 AI 的 API 差异
+- ✅ 统一的调用接口
+- ✅ 错误处理和超时
+- ✅ 易于添加新 AI 模型
+
+---
+
+## 💪 实战练习
+
+### 练习 1：设计数据获取接口（必做）
+
+为你的项目设计数据获取接口：
+
+```python
+class DataSource:
+    """数据源接口"""
+
+    def fetch_xxx(self, params):
+        """获取XXX数据"""
+        pass
+
+    def fetch_yyy(self, params):
+        """获取YYY数据"""
+        pass
+```
+
+**要求**：
+- 定义 3-5 个核心方法
+- 每个方法写清楚输入输出
+- 考虑错误情况
+
+---
+
+### 练习 2：实现一个简单的 API 客户端（必做）
+
+选择一个公开 API（例如：天气 API），实现：
+
+```python
+class WeatherAPI:
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.base_url = "https://api.weather.com"
+
+    def get_weather(self, city):
+        """获取天气"""
+        try:
+            url = f"{self.base_url}/current?city={city}&key={self.api_key}"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            return self._parse_response(response.json())
+        except Exception as e:
+            print(f"获取天气失败: {e}")
+            return None
+
+    def _parse_response(self, data):
+        """解析响应，转换为统一格式"""
+        return {
+            "temperature": data["temp"],
+            "humidity": data["humidity"],
+            # ...
+        }
+```
+
+---
+
+### 练习 3：添加重试机制（必做）
+
+为上面的 API 客户端添加重试：
+
+```python
+import time
+
+def fetch_with_retry(self, url, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, timeout=10)
+            return response.json()
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise
+            print(f"第{attempt+1}次失败，重试...")
+            time.sleep(2 ** attempt)  # 指数退避：2, 4, 8秒
+```
+
+---
+
+### 练习 4：添加缓存（选做）
+
+实现简单的缓存机制：
+
+```python
+class CachedAPI:
+    def __init__(self):
+        self.cache = {}
+
+    def get_data(self, key):
+        # 检查缓存
+        if key in self.cache:
+            data, timestamp = self.cache[key]
+            if time.time() - timestamp < 60:  # 60秒内有效
+                return data
+
+        # 获取新数据
+        data = self._fetch_from_api(key)
+        self.cache[key] = (data, time.time())
+        return data
+```
+
+---
+
+### 练习 5：错误分类处理（选做）
+
+根据不同错误类型采取不同策略：
+
+```python
+def smart_fetch(url):
+    try:
+        response = requests.get(url)
+
+        if response.status_code == 429:
+            # 限流：等待后重试
+            time.sleep(60)
+            return smart_fetch(url)
+
+        elif response.status_code >= 500:
+            # 服务器错误：短暂重试
+            time.sleep(5)
+            return smart_fetch(url)
+
+        elif response.status_code >= 400:
+            # 客户端错误：不重试
+            raise Exception(f"请求错误: {response.status_code}")
+
+        return response.json()
+
+    except requests.Timeout:
+        # 超时：重试
+        return smart_fetch(url)
+```
+
+---
+
+## 🤔 思考题
+
+### 1. 为什么要定义统一的数据模型（如 Account、Position）？
+
+<details>
+<summary>点击查看答案</summary>
+
+**不定义统一模型的问题**：
+
+```python
+# 业务逻辑要处理不同格式
+def calculate_profit(exchange_type, account_data):
+    if exchange_type == "binance":
+        equity = float(account_data["totalWalletBalance"])
+    elif exchange_type == "hyperliquid":
+        equity = float(account_data["marginSummary"]["accountValue"])
+    # 每个交易所都要判断！
+```
+
+**定义统一模型后**：
+
+```python
+def calculate_profit(account: Account):
+    equity = account.total_equity  # 统一字段
+    # 不关心数据来源
+```
+
+**好处**：
+1. ✅ 业务逻辑简单
+2. ✅ 易于添加新交易所（只需实现转换）
+3. ✅ 类型安全（IDE 有提示）
+4. ✅ 易于测试
+
+</details>
+
+---
+
+### 2. 缓存什么时候会出问题？
+
+<details>
+<summary>点击查看答案</summary>
+
+**问题场景**：
+
+1. **数据过期**
+```python
+# 缓存账户余额 1 小时
+balance = cache.get("balance")  # 1000 USDT
+
+# 实际上 30 分钟前已经亏损到 500 USDT
+# 但缓存还显示 1000，导致决策错误！
+```
+
+**解决**：根据数据特性设置合理的缓存时长
+- 实时数据（余额）：1-5 秒
+- 慢变数据（配置）：1 小时
+
+2. **缓存一致性**
+```python
+# 进程A写缓存
+cache["BTCUSDT"] = data1
+
+# 进程B也写缓存
+cache["BTCUSDT"] = data2  # 覆盖！
+```
+
+**解决**：使用分布式缓存（Redis）
+
+3. **内存溢出**
+```python
+# 无限增长的缓存
+for i in range(1000000):
+    cache[f"key_{i}"] = large_data  # 内存爆了！
+```
+
+**解决**：设置缓存上限（LRU 淘汰）
+
+</details>
+
+---
+
+### 3. 如何测试数据获取层？
+
+<details>
+<summary>点击查看答案</summary>
+
+**方法1：Mock（模拟）**
+
+```python
+from unittest.mock import Mock
+
+def test_get_account():
+    # 创建 Mock API
+    mock_api = Mock()
+    mock_api.get_account.return_value = {
+        "totalWalletBalance": "1000.0"
+    }
+
+    # 测试转换逻辑
+    account = parse_binance_account(mock_api.get_account())
+
+    assert account.total_equity == 1000.0
+```
+
+**方法2：测试服务器**
+
+```python
+# 启动本地测试服务器
+@app.route("/api/account")
+def mock_account():
+    return {"totalWalletBalance": "1000.0"}
+
+# 测试时连接测试服务器
+client = BinanceAPI(base_url="http://localhost:5000")
+```
+
+**方法3：使用测试网**
+
+```python
+# 连接交易所的测试网
+client = BinanceAPI(testnet=True)
+account = client.get_account()  # 真实 API，但不是真钱
+```
+
+</details>
+
+---
+
+## 📖 本章总结
+
+### 你学到了什么
+
+✅ **核心概念**：
+- 数据获取层的作用
+- 为什么需要封装外部 API
+- 统一数据模型的重要性
+
+✅ **思维方法**：
+- 接口抽象（依赖接口）
+- 统一数据模型（内部格式）
+- 错误处理和重试策略
+- 缓存策略
+
+✅ **实践技能**：
+- 能设计数据获取接口
+- 能实现 API 客户端
+- 能添加重试和缓存
+- 能处理各种错误
+
+✅ **案例收获**：
+- NOFX 的 Trader 接口设计
+- 如何统一多个交易所
+- 市场数据的获取和计算
+- AI API 的封装
+
+---
+
+### 数据获取层检查清单
+
+- [ ] **接口清晰**：定义明确的接口
+- [ ] **统一格式**：内部使用统一数据模型
+- [ ] **错误处理**：捕获并处理各种错误
+- [ ] **重试机制**：网络错误自动重试
+- [ ] **超时设置**：避免长时间等待
+- [ ] **缓存策略**：减少重复请求
+- [ ] **日志记录**：记录 API 调用
+- [ ] **易于测试**：支持 Mock 测试
+
+---
+
+### 下一步
+
+完成练习后，你应该有：
+- ✅ 数据获取接口设计
+- ✅ 一个简单的 API 客户端实现
+- ✅ 重试和缓存机制
+- ✅ 错误处理策略
+
+准备好后，进入 **第 6 章：业务逻辑层**，学习核心算法设计！
+
+---
+
+## 📚 延伸阅读
+
+- Python requests 库文档
+- Go http 包文档
+- 《重试策略：指数退避算法》
+- 《API 设计最佳实践》
+
+---
+
+## ❓ FAQ
+
+**Q1：所有 API 调用都要封装吗？**
+A：
+- 重复使用的 → 必须封装
+- 只用一次的 → 可以不封装
+- 外部依赖的 → 建议封装（方便替换）
+
+**Q2：重试次数设置多少合适？**
+A：
+- 一般 3 次
+- 关键操作 5 次
+- 幂等操作可以多次
+- 非幂等操作谨慎重试
+
+**Q3：什么时候用缓存，什么时候不用？**
+A：
+- 用缓存：数据变化慢、请求频繁
+- 不用缓存：数据实时性要求高
+
+**Q4：如何处理 API 限流？**
+A：
+- 读取 Retry-After 头部
+- 实现令牌桶限流
+- 降低请求频率
+
+---
+
+**🎉 恭喜完成第 5 章！**
+
+你已经掌握了数据获取层设计！
+
+记住：**好的封装让系统灵活，坏的封装让系统脆弱。**
+
+准备好了吗？进入第 6 章！💪
