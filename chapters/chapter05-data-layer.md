@@ -345,7 +345,111 @@ if data is None:  # 还是失败
 
 ## 📐 实战设计
 
-把思维方法落地到具体实现，分五个步骤设计数据获取层。
+### 整体设计框架
+
+在动手写代码之前，先理解数据获取层的**整体设计框架**。
+
+#### 三层结构
+
+数据获取层本身可以分为三层：
+
+```
+┌─────────────────────────────────────────┐
+│         业务逻辑层（使用方）             │
+│  decision.py, strategy.py...           │
+└─────────────────────────────────────────┘
+                    ↓ 调用
+┌─────────────────────────────────────────┐
+│    【第1层】抽象接口层（定义规范）        │
+│    ExchangeAPI (ABC)                   │
+│    - get_account()                     │  ← 统一的接口定义
+│    - get_klines()                      │
+│    - place_order()                     │
+└─────────────────────────────────────────┘
+                    ↑ 实现
+        ┌───────────┼───────────┐
+        ↓           ↓           ↓
+┌──────────┐ ┌──────────┐ ┌──────────┐
+│【第2层】  │ │ 具体实现  │ │ 具体实现  │
+│ BinanceAPI│ │Hyperliquid│ │  OKX API │  ← 各自实现接口
+│          │ │   API    │ │          │
+└──────────┘ └──────────┘ └──────────┘
+     ↓            ↓            ↓
+     ↓            ↓            ↓
+┌──────────┐ ┌──────────┐ ┌──────────┐
+│【第3层】  │ │  数据转换 │ │  数据转换 │
+│错误处理   │ │  + 缓存  │ │  + 重试  │  ← 容错和优化
+│+ 重试     │ │          │ │          │
+└──────────┘ └──────────┘ └──────────┘
+     ↓            ↓            ↓
+     ↓            ↓            ↓
+┌─────────────────────────────────────────┐
+│         外部API（不可控）                │
+│  Binance、Hyperliquid、OKX...          │
+└─────────────────────────────────────────┘
+```
+
+#### 为什么要分三层？
+
+| 层次 | 作用 | 好处 |
+|-----|------|------|
+| **第1层：抽象接口** | 定义"做什么" | 业务逻辑不依赖具体实现，可随时切换 |
+| **第2层：具体实现** | 定义"怎么做" | 每个API独立实现，互不影响 |
+| **第3层：容错优化** | 处理"出错怎么办" | 集中处理错误、重试、缓存 |
+
+#### 设计的核心逻辑
+
+从外向内思考（从问题到解决方案）：
+
+```
+1. 外部问题：API各不相同
+   ↓ 解决方案
+   第1层：定义统一接口（抽象）
+
+2. 实现问题：每个API格式不同
+   ↓ 解决方案
+   第2层：各自实现 + 数据转换（适配）
+
+3. 运行问题：API会失败、会慢
+   ↓ 解决方案
+   第3层：错误处理 + 重试 + 缓存（容错）
+```
+
+#### 设计的五个步骤
+
+按照从抽象到具体、从核心到外围的顺序：
+
+```
+步骤一：定义抽象接口        ← 定规范（最重要）
+        ↓
+步骤二：实现具体客户端      ← 适配器
+        ↓
+步骤三：定义统一数据模型    ← 内部标准
+        ↓
+步骤四：错误处理和重试      ← 容错机制
+        ↓
+步骤五：缓存策略            ← 性能优化（可选）
+```
+
+**为什么这个顺序？**
+1. **先定接口**：明确"需要什么功能"
+2. **再实现**：每个API去"实现这些功能"
+3. **统一格式**：确保"返回的数据格式一致"
+4. **处理错误**：保证"出错不崩溃"
+5. **优化性能**：减少"不必要的请求"
+
+#### 类比：开餐厅
+
+```
+第1层（抽象接口）   = 菜单（定义提供哪些菜）
+第2层（具体实现）   = 厨房（不同厨师做不同菜系）
+第3层（容错优化）   = 备用食材 + 库存管理（应对缺货）
+
+顾客（业务逻辑）只看菜单点菜，不关心：
+- 哪个厨师做的（具体实现）
+- 食材从哪来的（外部API）
+- 厨房如何应对缺货（错误处理）
+```
 
 ---
 
@@ -726,51 +830,176 @@ class CachedDataFetcher:
 
 ## 📚 NOFX 案例分析
 
+### 关于语言切换的说明
+
+> **💡 重要提示**：
+>
+> 前面的示例我们用 **Python** 讲解概念，因为Python更容易理解。
+>
+> 但 **NOFX 项目是用 Go 语言**写的，所以这里会展示真实的 Go 代码。
+>
+> **不用担心**！即使你不懂Go，也能理解设计思路，因为：
+> - ✅ 概念和Python是一样的
+> - ✅ 我会用注释详细说明
+> - ✅ 会提供Python和Go的对照
+> - ✅ 重点是**设计思路**，不是语法细节
+
+---
+
+### Python vs Go 快速对照
+
+#### 接口定义对照
+
+<table>
+<tr>
+<td width="50%">
+
+**Python 写法**
+```python
+from abc import ABC, abstractmethod
+
+class Trader(ABC):
+    @abstractmethod
+    def get_account(self):
+        """获取账户"""
+        pass
+
+    @abstractmethod
+    def open_long(self, symbol, qty):
+        """开多单"""
+        pass
+```
+
+</td>
+<td width="50%">
+
+**Go 写法**
+```go
+// 接口定义
+type Trader interface {
+    // 获取账户
+    GetAccount() (Account, error)
+
+    // 开多单
+    OpenLong(symbol string, qty float64) error
+}
+```
+
+</td>
+</tr>
+</table>
+
+#### 实现接口对照
+
+<table>
+<tr>
+<td width="50%">
+
+**Python 写法**
+```python
+class BinanceTrader(Trader):
+    def get_account(self):
+        # 调用API
+        response = self.client.get_account()
+        # 转换格式
+        return self._parse(response)
+```
+
+</td>
+<td width="50%">
+
+**Go 写法**
+```go
+type BinanceTrader struct {
+    client *BinanceClient
+}
+
+func (b *BinanceTrader) GetAccount() (Account, error) {
+    // 调用API
+    response := b.client.GetAccount()
+    // 转换格式
+    return b.parse(response)
+}
+```
+
+</td>
+</tr>
+</table>
+
+**关键点**：
+- Python用 `class X(Interface)` 继承，Go自动实现接口（只要方法签名匹配）
+- Python用 `self`，Go用结构体方法 `(b *BinanceTrader)`
+- Go多返回值：`(Account, error)`，Python通常只返回一个或抛异常
+- **但设计思路完全一样**：定义接口 → 各自实现 → 统一格式
+
+---
+
 ### NOFX 的数据获取层设计
 
 #### 1. Trader 接口（交易所抽象）
+
+下面是NOFX真实代码，用Go实现的交易所接口：
 
 ```go
 // trader/interface.go
 package trader
 
+// 【相当于Python的 dataclass】
+// 统一的账户数据模型
+
 type Account struct {
-    TotalEquity      float64
-    AvailableBalance float64
-    MarginUsed       float64
-    MarginUsedPct    float64
+    TotalEquity      float64  // 总权益（Python: total_equity）
+    AvailableBalance float64  // 可用余额（Python: available_balance）
+    MarginUsed       float64  // 已用保证金（Python: margin_used）
+    MarginUsedPct    float64  // 保证金使用率（Python: margin_used_pct）
 }
 
+// 【相当于Python的 dataclass】
 type Position struct {
-    Symbol           string
-    Side             string  // "long" or "short"
-    EntryPrice       float64
-    MarkPrice        float64
-    Quantity         float64
-    Leverage         int
-    UnrealizedPnL    float64
-    LiquidationPrice float64
+    Symbol           string   // 交易对，如 "BTCUSDT"
+    Side             string   // "long" 或 "short"
+    EntryPrice       float64  // 开仓价格
+    MarkPrice        float64  // 标记价格
+    Quantity         float64  // 持仓数量
+    Leverage         int      // 杠杆倍数
+    UnrealizedPnL    float64  // 未实现盈亏
+    LiquidationPrice float64  // 强平价格
 }
 
-// Trader 接口（所有交易所必须实现）
+// 【相当于Python的抽象基类 ABC】
+// Trader 接口：所有交易所必须实现这些方法
 type Trader interface {
-    // 账户信息
-    GetAccount() (Account, error)
-    GetPositions() ([]Position, error)
+    // 账户信息（查询类）
+    GetAccount() (Account, error)      // 获取账户信息
+    GetPositions() ([]Position, error) // 获取持仓列表（[]相当于Python的list）
 
-    // 交易操作
-    OpenLong(symbol string, quantity float64, leverage int) error
-    OpenShort(symbol string, quantity float64, leverage int) error
-    CloseLong(symbol string, quantity float64) error
-    CloseShort(symbol string, quantity float64) error
+    // 交易操作（执行类）
+    OpenLong(symbol string, quantity float64, leverage int) error   // 开多单
+    OpenShort(symbol string, quantity float64, leverage int) error  // 开空单
+    CloseLong(symbol string, quantity float64) error                // 平多单
+    CloseShort(symbol string, quantity float64) error               // 平空单
 
-    // 风控
-    SetStopLoss(symbol string, side string, price float64) error
-    SetTakeProfit(symbol string, side string, price float64) error
+    // 风控（风险管理）
+    SetStopLoss(symbol string, side string, price float64) error    // 设置止损
+    SetTakeProfit(symbol string, side string, price float64) error  // 设置止盈
 }
 ```
 
 #### 2. Binance 实现
+
+**对应Python代码的结构**：
+```python
+class BinanceFutures(Trader):  # 相当于 Go 的 struct 实现 interface
+    def __init__(self, api_key, secret_key):
+        self.client = BinanceClient(api_key, secret_key)
+
+    def get_account(self):
+        # 1. 调用API
+        # 2. 转换格式
+        # 3. 返回统一的Account对象
+```
+
+**NOFX的Go实现**：
 
 ```go
 // trader/binance_futures.go
@@ -779,16 +1008,19 @@ package trader
 import (
     "context"
     "fmt"
-    "github.com/adshao/go-binance/v2/futures"
+    "github.com/adshao/go-binance/v2/futures"  // Binance官方SDK
     "strconv"
 )
 
+// 【相当于Python的 class BinanceFutures(Trader)】
 type BinanceFutures struct {
-    client    *futures.Client
-    apiKey    string
-    secretKey string
+    client    *futures.Client  // Binance客户端（Python: self.client）
+    apiKey    string           // API密钥
+    secretKey string           // 密钥
 }
 
+// 【相当于Python的 __init__】
+// 构造函数：创建BinanceFutures实例
 func NewBinanceFutures(apiKey, secretKey string) *BinanceFutures {
     client := binance.NewFuturesClient(apiKey, secretKey)
     return &BinanceFutures{
@@ -798,25 +1030,29 @@ func NewBinanceFutures(apiKey, secretKey string) *BinanceFutures {
     }
 }
 
-// GetAccount 获取账户信息
+// 【相当于Python的 def get_account(self)】
+// GetAccount 获取账户信息（实现Trader接口）
 func (b *BinanceFutures) GetAccount() (Account, error) {
-    // 1. 调用 Binance API
+    // 步骤1：调用 Binance API（外部调用）
     account, err := b.client.NewGetAccountService().Do(context.Background())
     if err != nil {
+        // Go的错误处理（Python会用 try-except）
         return Account{}, fmt.Errorf("获取账户失败: %w", err)
     }
 
-    // 2. 转换为统一格式
+    // 步骤2：数据转换（Binance格式 → 统一格式）
+    // Binance返回的是字符串，需要转成浮点数
     totalEquity, _ := strconv.ParseFloat(account.TotalWalletBalance, 64)
     availableBalance, _ := strconv.ParseFloat(account.AvailableBalance, 64)
     marginUsed, _ := strconv.ParseFloat(account.TotalInitialMargin, 64)
 
+    // 步骤3：返回统一的Account对象
     return Account{
-        TotalEquity:      totalEquity,
-        AvailableBalance: availableBalance,
+        TotalEquity:      totalEquity,              // Binance字段映射
+        AvailableBalance: availableBalance,         // 到统一格式
         MarginUsed:       marginUsed,
-        MarginUsedPct:    (marginUsed / totalEquity) * 100,
-    }, nil
+        MarginUsedPct:    (marginUsed / totalEquity) * 100,  // 计算百分比
+    }, nil  // Go返回两个值：结果 + 错误
 }
 
 // GetPositions 获取持仓
@@ -897,18 +1133,52 @@ func formatQuantity(q float64) string {
 }
 ```
 
+**🎯 关键点总结**：
+
+无论Python还是Go，核心设计逻辑是一样的：
+
+| 步骤 | 做什么 | Python | Go |
+|-----|-------|--------|-----|
+| 1 | 定义接口 | `class Trader(ABC)` | `type Trader interface` |
+| 2 | 实现接口 | `class BinanceTrader(Trader)` | `type BinanceFutures struct` + 实现方法 |
+| 3 | 调用API | `requests.get()` | `client.NewGetAccountService().Do()` |
+| 4 | 转换格式 | `account.total_equity = float(raw["balance"])` | `totalEquity := strconv.ParseFloat(...)` |
+| 5 | 返回统一对象 | `return Account(...)` | `return Account{...}, nil` |
+
+**看懂Go代码的技巧**：
+- 不要纠结语法细节（`:=`、`*`、`error` 等）
+- 关注**三步走**：调用API → 转换格式 → 返回对象
+- 注释里会标注对应的Python写法
+
+---
+
 #### 3. Hyperliquid 实现
+
+**Python伪代码对照**：
+```python
+class HyperliquidTrader(Trader):  # 同样实现Trader接口
+    def __init__(self, private_key, wallet_addr):
+        self.private_key = private_key
+        self.wallet_addr = wallet_addr
+
+    def get_account(self):
+        # 1. 调用 Hyperliquid API（与Binance不同）
+        # 2. 转换格式（与Binance不同）
+        # 3. 返回统一的 Account 对象（与Binance相同！）
+```
+
+**NOFX的Go实现**：
 
 ```go
 // trader/hyperliquid_trader.go
 package trader
 
+// 【相当于Python的 class HyperliquidTrader(Trader)】
 // 实现同样的 Trader 接口，但调用 Hyperliquid API
-
 type HyperliquidTrader struct {
-    privateKey string
-    walletAddr string
-    isTestnet  bool
+    privateKey string  // 私钥（Hyperliquid用私钥认证，不同于Binance）
+    walletAddr string  // 钱包地址
+    isTestnet  bool    // 是否测试网
 }
 
 func (h *HyperliquidTrader) GetAccount() (Account, error) {
