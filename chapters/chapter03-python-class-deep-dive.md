@@ -844,8 +844,8 @@ class BankAccount:
 学完类之后，你可以学习：
 
 1. [接口和抽象基类](chapter03-interface-deep-dive.md) - 定义规范
-2. [继承与多态](继承深度解析.md) - 代码复用
-3. [设计模式](设计模式.md) - 优雅地使用类
+2. [Python基础扩展](chapter03-python-basics.md) - 函数、模块、包管理
+3. [模块化拆分](chapter03-module-design.md) - 如何组织项目结构
 
 ---
 
@@ -866,4 +866,4 @@ class BankAccount:
 
 ---
 
-**返回** → [第3章](chapter03-python-basics.md) | [README](README.md)
+**返回** → [第3章：模块化拆分](chapter03-module-design.md) | [完整学习指南](../COMPLETE_GUIDE.md)

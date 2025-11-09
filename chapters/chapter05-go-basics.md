@@ -657,4 +657,4 @@ Python能实现的，Go也能实现，反之亦然。重点是**设计**，不�
 
 ---
 
-**返回** → [README](README.md) | [第2章](chapter02-architecture-design.md)
+**返回** → [第5章：数据获取层](chapter05-data-layer.md) | [完整学习指南](../COMPLETE_GUIDE.md)

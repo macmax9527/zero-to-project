@@ -20,7 +20,7 @@
 **完全没问题！** 你可以：
 - ✅ 专注Python部分学习（所有核心思维都用Python讲解）
 - ✅ Go代码只看设计思路和注释（不纠结语法细节）
-- ✅ 参考 [**Go快速入门**](go-basics.md)（10分钟了解基本语法）
+- ✅ 参考 [**Go快速入门**](chapters/chapter05-go-basics.md)（10分钟了解基本语法）
 
 ### 需要学Go吗？
 
@@ -133,8 +133,9 @@
 - 3.6 实战练习
 
 **扩展文档**：
-- 📘 [Python基础扩展](chapter03-python-basics.md) - 函数、类、模块、接口详解
-- 📘 [接口和抽象基类深度解析](chapter03-interface-deep-dive.md) - ABC使用教程、生活化比喻、完整实战案例
+- 📘 [Python基础扩展](chapters/chapter03-python-basics.md) - 函数、类、模块、接口详解
+- 📘 [Python类深度解析](chapters/chapter03-python-class-deep-dive.md) - 从零到精通的类完整学习指南
+- 📘 [接口和抽象基类深度解析](chapters/chapter03-interface-deep-dive.md) - ABC使用教程、生活化比喻、完整实战案例
 
 ---
 
@@ -158,7 +159,7 @@
 
 ---
 
-#### ✅ [第5章：数据获取层 - 外部依赖管理](chapter05-data-layer.md)
+#### ✅ [第5章：数据获取层 - 外部依赖管理](chapters/chapter05-data-layer.md)
 
 **核心要点**：
 - 接口抽象：隔离外部依赖
@@ -174,6 +175,9 @@
 - 5.5 缓存策略
 - 5.6 NOFX的Trader接口
 - 5.7 实战练习
+
+**扩展文档**：
+- 📘 [Go快速入门](chapters/chapter05-go-basics.md) - 面向Python开发者的Go语法速查指南
 
 ---
 
