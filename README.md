@@ -5,7 +5,6 @@
 ## 📖 学习文档索引
 
 ### 🎯 开始之前
-- [学习指南总览](../LEARNING_GUIDE.md) - 完整学习框架和路线图
 - 🆕 [**完全学习指南**](COMPLETE_GUIDE.md) - **一份文档总览全部内容**（推荐！）
 
 ### 💡 重要说明：关于编程语言
@@ -21,7 +20,7 @@
 - ✅ Go代码部分会提供 **Python对照** 和详细注释
 - ✅ 重点是**设计思维**，不是Go语法
 - ✅ 完全可以只看Python部分，跳过Go细节
-- ✅ 提供 [**Go快速入门**](go-basics.md)（可选学习）
+- ✅ 提供 [**Go快速入门**](chapters/chapter05-go-basics.md)（可选学习）
 
 **建议**：
 - 初学者：专注Python，Go代码只看设计思路
@@ -31,27 +30,27 @@
 
 ### 第一阶段：项目思维基础
 
-- ✅ [第1章：从需求到项目 - 需求分析思维](chapter01-requirements-analysis.md)
+- ✅ [第1章：从需求到项目 - 需求分析思维](chapters/chapter01-requirements-analysis.md)
   - 5W1H 提问法
   - 需求优先级划分
   - 用户故事编写
   - NOFX 需求分析全过程
   - **实战练习**：分析你的项目想法
 
-- ✅ [第2章：项目整体架构设计 - 全局思维](chapter02-architecture-design.md)
+- ✅ [第2章：项目整体架构设计 - 全局思维](chapters/chapter02-architecture-design.md)
   - 前后端分离架构
   - 数据流设计
   - 技术选型决策
   - NOFX 架构设计剖析
   - **实战练习**：画出你的架构图
 
-- ✅ [第3章：模块化拆分 - 分治思维](chapter03-module-design.md)
+- ✅ [第3章：模块化拆分 - 分治思维](chapters/chapter03-module-design.md)
   - 模块边界划分
   - 接口设计原则
   - 依赖关系管理
   - NOFX 的 8 大模块
   - **实战练习**：拆分你的项目模块
-  - 🆕 [Python 基础扩展：函数、类、模块、接口详解](chapter03-python-basics.md)
+  - 🆕 [Python 基础扩展：函数、类、模块、接口详解](chapters/chapter03-python-basics.md)
     - 函数 vs 类的区别（用生活化比喻）
     - 模块和文件的关系
     - import 导入机制详解
@@ -59,7 +58,7 @@
     - 接口的真正含义（不是文件，是规范）
     - 完整项目示例：餐厅点餐系统、订单系统
     - NOFX 调用流程深度分析
-  - 🆕 [Python 类深度解析 - 从零到精通](python-class-deep-dive.md)
+  - 🆕 [Python 类深度解析 - 从零到精通](chapters/chapter03-python-class-deep-dive.md)
     - 类和对象的本质（工厂 vs 产品）
     - 深入理解 self 和 __init__
     - 实例属性 vs 类属性
@@ -68,7 +67,7 @@
     - 私有属性和特殊方法
     - 完整银行账户系统案例
     - 12个常见问题FAQ
-  - 🆕 [接口和抽象基类深度解析](chapter03-interface-deep-dive.md)
+  - 🆕 [接口和抽象基类深度解析](chapters/chapter03-interface-deep-dive.md)
     - 生活化比喻（厨师招聘、支付系统）
     - 一步步教你使用 ABC（从简单到复杂）
     - 常见错误和解决方案
@@ -78,28 +77,28 @@
 
 ### 第二阶段：核心模块深入
 
-- ✅ [第4章：配置系统 - 灵活性设计](chapter04-configuration-system.md)
+- ✅ [第4章：配置系统 - 灵活性设计](chapters/chapter04-configuration-system.md)
   - 配置 vs 硬编码
   - 分层配置策略
   - 敏感信息保护
   - NOFX 配置系统设计
   - **实战练习**：设计你的配置文件
 
-- ✅ [第5章：数据获取层 - 外部依赖管理](chapter05-data-layer.md)
+- ✅ [第5章：数据获取层 - 外部依赖管理](chapters/chapter05-data-layer.md)
   - 接口抽象
   - 统一数据模型
   - 错误处理和重试
   - 缓存策略
   - **实战练习**：实现 API 客户端
 
-- ✅ [第6章：业务逻辑层 - 核心算法设计](chapter06-business-logic.md)
+- ✅ [第6章：业务逻辑层 - 核心算法设计](chapters/chapter06-business-logic.md)
   - 业务流程建模
   - 状态机思维
   - 规则引擎模式
   - NOFX 决策引擎深度剖析
   - **实战练习**：画出业务流程图
 
-- ✅ [第7章：数据持久化 - 存储设计](chapter07-data-persistence.md)
+- ✅ [第7章：数据持久化 - 存储设计](chapters/chapter07-data-persistence.md)
   - 文件存储 vs 数据库
   - SQLite/MySQL/MongoDB 选择
   - 数据模型设计
@@ -107,7 +106,7 @@
   - NOFX 的极简存储策略
   - **实战练习**：设计数据库结构
 
-- ✅ [第8章：API 服务层 - 前后端协作](chapter08-api-service.md)
+- ✅ [第8章：API 服务层 - 前后端协作](chapters/chapter08-api-service.md)
   - RESTful API 设计原则
   - HTTP 基础知识
   - 使用 Gin/Flask 开发 API
@@ -116,7 +115,7 @@
   - NOFX API 服务器分析
   - **实战练习**：实现用户管理 API
 
-- ✅ [第9章：前端展示层 - 用户界面设计](chapter09-frontend-ui.md)
+- ✅ [第9章：前端展示层 - 用户界面设计](chapters/chapter09-frontend-ui.md)
   - React 快速入门
   - 组件化思维
   - 状态管理（useState、Context）
@@ -128,7 +127,7 @@
 
 ### 第三阶段：系统集成
 
-- ✅ [第10章：模块间通信 - 协作设计](chapter10-module-communication.md)
+- ✅ [第10章：模块间通信 - 协作设计](chapters/chapter10-module-communication.md)
   - 四种通信方式（直接调用、事件驱动、消息队列、共享状态）
   - 发布-订阅模式
   - 消息队列实现
@@ -136,7 +135,7 @@
   - NOFX 的通信设计分析
   - **实战练习**：实现观察者模式、消息队列应用
 
-- ✅ [第11章：并发和异步 - 性能优化](chapter11-concurrency-async.md)
+- ✅ [第11章：并发和异步 - 性能优化](chapters/chapter11-concurrency-async.md)
   - 并发 vs 并行概念
   - Python 并发编程（Threading、Multiprocessing、asyncio）
   - Go 并发编程（Goroutine、Channel、WaitGroup）
@@ -145,7 +144,7 @@
   - NOFX 的并发实践
   - **实战练习**：并发下载、异步爬虫、Worker Pool
 
-- ✅ [第12章：错误处理和容错 - 健壮性设计](chapter12-error-handling.md)
+- ✅ [第12章：错误处理和容错 - 健壮性设计](chapters/chapter12-error-handling.md)
   - 错误类型和分类
   - 错误处理策略（捕获、转换、提前验证、降级）
   - 重试机制（装饰器、指数退避）
@@ -158,14 +157,14 @@
 
 ### 第四阶段：渐进式开发
 
-- ✅ [第13章：MVP 开发 - 最小可行产品](chapter13-mvp-development.md)
+- ✅ [第13章：MVP 开发 - 最小可行产品](chapters/chapter13-mvp-development.md)
   - MVP 定义和目标
   - MoSCoW 优先级法
   - MVP Canvas 画布
   - 快速开发原则
   - NOFX 的 MVP 演进历程
   - **实战练习**：规划你的 MVP
-- ✅ [第14章：迭代扩展 - 版本规划](chapter14-iterative-extension.md)
+- ✅ [第14章：迭代扩展 - 版本规划](chapters/chapter14-iterative-extension.md)
   - 迭代开发的优势
   - 语义化版本（Semantic Versioning）
   - 功能优先级排序（MoSCoW、RICE）
@@ -173,7 +172,7 @@
   - 数据库迁移（Alembic、golang-migrate）
   - NOFX 的版本演进
   - **实战练习**：规划项目版本、API兼容设计、数据库迁移
-- ✅ [第15章：测试和调试 - 质量保证](chapter15-testing-debugging.md)
+- ✅ [第15章：测试和调试 - 质量保证](chapters/chapter15-testing-debugging.md)
   - 测试的价值和类型
   - 单元测试（pytest、断言、mock）
   - 测试覆盖率
@@ -181,7 +180,7 @@
   - 常见Bug模式
   - NOFX 的测试实践
   - **实战练习**：为交易系统编写测试、调试训练
-- ✅ [第16章：部署和运维 - 生产环境](chapter16-deployment-operations.md)
+- ✅ [第16章：部署和运维 - 生产环境](chapters/chapter16-deployment-operations.md)
   - 开发环境 vs 生产环境
   - 服务器选择和配置（VPS、云服务器、PaaS）
   - Docker 容器化（Dockerfile、Docker Compose）
@@ -196,7 +195,7 @@
 
 ### 第五阶段：进阶主题
 
-- ✅ [第17章：代码组织和规范 - 可维护性](chapter17-code-organization.md)
+- ✅ [第17章：代码组织和规范 - 可维护性](chapters/chapter17-code-organization.md)
   - 命名规范（见名知意、风格统一）
   - 代码风格（PEP 8、Effective Go）
   - 项目结构（Python、Go、React）
@@ -205,7 +204,7 @@
   - 重构技巧（提取函数、减少嵌套）
   - NOFX 的代码组织
   - **实战练习**：重构代码、设计项目结构
-- ✅ [第18章：扩展性设计 - 应对变化](chapter18-extensibility-design.md)
+- ✅ [第18章：扩展性设计 - 应对变化](chapters/chapter18-extensibility-design.md)
   - 开闭原则、依赖倒置、里氏替换
   - 插件系统（注册、装饰器、动态加载）
   - 策略模式和工厂模式
@@ -213,7 +212,7 @@
   - 依赖注入和IoC容器
   - NOFX 的扩展性设计
   - **实战练习**：实现导出器插件、权限系统、添加新策略
-- ✅ [第19章：性能优化 - 瓶颈分析](chapter19-performance-optimization.md)
+- ✅ [第19章：性能优化 - 瓶颈分析](chapters/chapter19-performance-optimization.md)
   - 性能分析工具（cProfile、pprof、Chrome DevTools）
   - 数据库优化（索引、查询优化、连接池）
   - 缓存策略（LRU、Redis、多级缓存）
@@ -221,7 +220,7 @@
   - 后端性能优化（异步、批量操作、对象池）
   - NOFX 性能分析
   - **实战练习**：优化慢查询、实现缓存装饰器、性能分析
-- ✅ [第20章：文档和协作 - 团队开发](chapter20-documentation-collaboration.md)
+- ✅ [第20章：文档和协作 - 团队开发](chapters/chapter20-documentation-collaboration.md)
   - API文档（Swagger/OpenAPI）
   - 技术文档（README、CHANGELOG、架构文档）
   - Git协作流程（Git Flow、提交规范）
@@ -234,7 +233,7 @@
 
 ### 第六阶段：综合实战
 
-- ✅ [第21章：项目实战 - 构建简化版 NOFX](chapter21-project-practice.md)
+- ✅ [第21章：项目实战 - 构建简化版 NOFX](chapters/chapter21-project-practice.md)
   - 需求分析和技术选型
   - 模块化架构设计
   - 币安 API 集成
@@ -243,7 +242,7 @@
   - 测试、部署和扩展
   - **实战练习**：从零构建交易机器人
 
-- ✅ [第22章：举一反三 - 应用到其他项目](chapter22-apply-to-other-projects.md)
+- ✅ [第22章：举一反三 - 应用到其他项目](chapters/chapter22-apply-to-other-projects.md)
   - 学习回顾（六大阶段）
   - 项目思维框架（通用开发流程）
   - 不同项目类型分析（博客、待办、电商、数据分析）
@@ -387,9 +386,9 @@
 
 ## 📌 快速导航
 
-- [← 返回项目主页](../README.md)
-- [学习指南总览](../LEARNING_GUIDE.md)
-- [开始第1章 →](chapter01-requirements-analysis.md)
+- [完全学习指南](COMPLETE_GUIDE.md)
+- [进度总结](PROGRESS_SUMMARY.md)
+- [开始第1章 →](chapters/chapter01-requirements-analysis.md)
 
 ---
 
